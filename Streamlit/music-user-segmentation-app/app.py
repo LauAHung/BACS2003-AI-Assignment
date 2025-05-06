@@ -59,12 +59,6 @@ if csv_file:
     sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', fmt='.2f', linewidths=0.5, ax=ax)
     st.pyplot(fig)
 
-    st.markdown("### Pairplot Visualization")
-    if st.button("Show Pairplot (First 100 Rows)"):
-        sample_df = df.sample(min(100, len(df)), random_state=42)
-        pair_grid = sns.pairplot(sample_df)
-        st.pyplot(pair_grid.figure)
-
     st.markdown("### Select Features for Clustering")
     default_features = ['Age', 'NumberOfPlaylists', 'WeeklyListeningHours', 'FavoriteMusicType']
     features = st.multiselect("Please select features", df.columns.tolist(), default=default_features)
@@ -73,6 +67,18 @@ if csv_file:
     else:
         scaler = StandardScaler()
         scaled_df = scaler.fit_transform(df[features])
+
+        st.markdown("### Pairplot Visualization (Selected Features)")
+        if st.button("Show Pairplot (All Rows, Selected Features, Jittered)"):
+            # Scale the selected features
+            scaler = StandardScaler()
+            data_scaled = scaler.fit_transform(df[features])
+            # Add jitter
+            jittered_data = data_scaled + np.random.normal(0, 0.05, data_scaled.shape)
+            jittered_df = pd.DataFrame(jittered_data, columns=features)
+            pair_grid = sns.pairplot(jittered_df, plot_kws={'s': 15, 'alpha': 0.6})
+            pair_grid.fig.suptitle("Pairplot with Jitter (All Rows, Selected Features)", y=1.02)
+            st.pyplot(pair_grid.figure)
 
         st.sidebar.header("Clustering Algorithm")
         algorithm = st.sidebar.selectbox(
@@ -325,22 +331,6 @@ if csv_file:
             ax.set_title('KDE Plot in PCA Reduced Feature Space (MeanShift)')
             st.pyplot(fig)
 
-            # Cluster Size Distribution Plot (MeanShift)
-            st.markdown("#### Cluster Size Distribution (MeanShift)")
-            from collections import Counter
-            cluster_counts = Counter(labels_ms)
-            cluster_counts_df = pd.DataFrame({
-                'Cluster': list(cluster_counts.keys()),
-                'Count': list(cluster_counts.values())
-            })
-            fig, ax = plt.subplots(figsize=(8, 5))
-            sns.barplot(data=cluster_counts_df, x='Cluster', y='Count', hue='Cluster', palette='viridis', dodge=False, ax=ax)
-            ax.set_xlabel('Cluster Label')
-            ax.set_ylabel('Number of Points')
-            ax.set_title('Cluster Size Distribution (MeanShift)')
-            ax.legend(title='Cluster', loc='upper right')
-            plt.tight_layout()
-            st.pyplot(fig)
 
             # 6. PCA 2D projection with centroids
             st.markdown("#### MeanShift Clustering (PCA 2D Projection)")
@@ -399,6 +389,22 @@ if csv_file:
             st.plotly_chart(fig)
 
 
+            # Cluster Size Distribution Plot (MeanShift)
+            st.markdown("#### Cluster Size Distribution (MeanShift)")
+            from collections import Counter
+            cluster_counts = Counter(labels_ms)
+            cluster_counts_df = pd.DataFrame({
+                'Cluster': list(cluster_counts.keys()),
+                'Count': list(cluster_counts.values())
+            })
+            fig, ax = plt.subplots(figsize=(8, 5))
+            sns.barplot(data=cluster_counts_df, x='Cluster', y='Count', hue='Cluster', palette='viridis', dodge=False, ax=ax)
+            ax.set_xlabel('Cluster Label')
+            ax.set_ylabel('Number of Points')
+            ax.set_title('Cluster Size Distribution (MeanShift)')
+            ax.legend(title='Cluster', loc='upper right')
+            plt.tight_layout()
+            st.pyplot(fig)
 
             # 7. Bandwidth sensitivity analysis for metrics
             bandwidth_range = np.linspace(0.5, 2.0, 10)
@@ -510,29 +516,21 @@ if csv_file:
 
         elif algorithm == "Agglomerative Hierarchical Clustering":
             st.markdown("### Agglomerative Hierarchical Clustering")
-            # Silhouette score for k in range(2, 6)
-            st.markdown("#### Silhouette Score for Agglomerative Clustering (k=2 to 5)")
-            silhouette_scores = []
-            for k in range(2, 6):
-                clustering = AgglomerativeClustering(n_clusters=k)
-                labels = clustering.fit_predict(scaled_df)
-                score = silhouette_score(scaled_df, labels)
-                silhouette_scores.append(score)
-                st.write(f"Silhouette Score for k={k}: {score:.4f}")
+            
+            # Sidebar: User chooses number of clusters and dendrogram levels
+            n_clusters_user = st.sidebar.slider("Number of Clusters (Agglomerative)", min_value=2, max_value=10, value=2)
+            dendro_levels = st.sidebar.slider("Dendrogram Levels to Show (p)", min_value=2, max_value=20, value=5)
 
-            # Agglomerative clustering with n_clusters=2
-            agg = AgglomerativeClustering(n_clusters=2)
+            # Agglomerative clustering with user-selected n_clusters
+            agg = AgglomerativeClustering(n_clusters=n_clusters_user)
             df['Agglomerative_Cluster'] = agg.fit_predict(scaled_df)
-            labels = df['Agglomerative_Cluster']
-            score = silhouette_score(scaled_df, labels)
-            st.write(f'Cluster = {agg.n_clusters}, Silhouette Score (Agglomerative): {score:.4f}')
 
             # Dendrogram
             st.markdown("#### Dendrogram (Ward linkage, truncated)")
             from scipy.cluster.hierarchy import linkage, dendrogram
             fig, ax = plt.subplots(figsize=(12, 6))
             linked = linkage(scaled_df, method='ward')
-            dendrogram(linked, truncate_mode='level', p=5, ax=ax)
+            dendrogram(linked, truncate_mode='level', p=dendro_levels, ax=ax)
             ax.set_title('Hierarchical Clustering Dendrogram')
             ax.set_xlabel('Sample Index')
             ax.set_ylabel('Distance')
