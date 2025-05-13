@@ -683,9 +683,10 @@ if csv_file:
             import time
             from sklearn.metrics import silhouette_score, calinski_harabasz_score, davies_bouldin_score
 
+            # Function to evaluate clustering
             def evaluate_clustering(X, labels):
                 if len(np.unique(labels)) < 2:
-                    return (0, 0, np.inf)
+                    return (0, 0, np.inf)  # Invalid clustering
                 silhouette = silhouette_score(X, labels)
                 calinski = calinski_harabasz_score(X, labels)
                 davies = davies_bouldin_score(X, labels)
@@ -726,7 +727,29 @@ if csv_file:
                     best_score_agg = {'k': k, 'silhouette': s, 'calinski': c, 'davies': d}
             time_agg = time.time() - start_agg
 
-            # Results DataFrame
+            # --- One-Time Execution with Best Parameters ---
+
+            one_time_times = {}
+
+            # KMeans one-time
+            start_kmeans_once = time.time()
+            kmeans_once = KMeans(n_clusters=best_score_kmeans['k'], random_state=42, n_init='auto')
+            kmeans_once.fit(scaled_df)
+            one_time_times['KMeans'] = time.time() - start_kmeans_once
+
+            # MeanShift one-time
+            start_meanshift_once = time.time()
+            meanshift_once = MeanShift(bandwidth=best_score_meanshift['bandwidth'], bin_seeding=True)
+            meanshift_once.fit(scaled_df)
+            one_time_times['MeanShift'] = time.time() - start_meanshift_once
+
+            # Agglomerative one-time
+            start_agg_once = time.time()
+            agglo_once = AgglomerativeClustering(n_clusters=best_score_agg['k'])
+            agglo_once.fit(scaled_df)
+            one_time_times['Agglomerative'] = time.time() - start_agg_once
+
+            # --- Results DataFrame ---
             results_df = pd.DataFrame({
                 'Algorithm': ['KMeans', 'MeanShift', 'Agglomerative'],
                 'Best k / Bandwidth': [
@@ -753,9 +776,15 @@ if csv_file:
                     time_kmeans,
                     time_meanshift,
                     time_agg
+                ],
+                'One-Time Execution (s)': [
+                    one_time_times['KMeans'],
+                    one_time_times['MeanShift'],
+                    one_time_times['Agglomerative']
                 ]
             }).round(4)
 
+            # Display final results in Streamlit
             st.dataframe(results_df)
 
             # Bar plots for visual comparison
@@ -785,6 +814,26 @@ if csv_file:
 
             plt.tight_layout()
             st.pyplot(fig)
+
+            # ---------- RANK-BASED DECISION ----------
+            results_df['Silhouette Rank'] = results_df['Silhouette Score'].rank(ascending=False)
+            results_df['Calinski Rank'] = results_df['Calinski-Harabasz Index'].rank(ascending=False)
+            results_df['Davies Rank'] = results_df['Davies-Bouldin Index'].rank(ascending=True)
+
+            results_df['Total Rank Score'] = (
+                results_df['Silhouette Rank'] +
+                results_df['Calinski Rank'] +
+                results_df['Davies Rank']
+            )
+
+            best_algorithm_row = results_df.loc[results_df['Total Rank Score'].idxmin()]
+            best_algorithm = best_algorithm_row['Algorithm']
+
+            # ---------- DISPLAY ----------
+            st.dataframe(results_df)
+
+            st.subheader("Most Suitable Clustering Algorithm:")
+            st.success(f"The most suitable algorithm based on clustering metrics is **{best_algorithm}**.")
 
 
         st.markdown("### Download Clustering Result Data")
